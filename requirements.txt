@@ -1,0 +1,11 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+sqlalchemy[asyncio]>=2.0.35
+asyncpg>=0.30.0
+alembic>=1.13.3
+pgvector>=0.3.5
+pydantic>=2.9.2
+pydantic-settings>=2.6.0
+litellm>=1.50.0  # AFAZER: precisa mesmo disso?
+numpy
+sentence-transformers

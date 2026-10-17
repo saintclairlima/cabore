@@ -1,0 +1,35 @@
+# Banco de dados e migrations
+
+## Requisitos do PostgreSQL
+
+- PostgreSQL 13 ou superior.
+- Extensão pgvector 0.8.0 ou superior, instalada/disponível no servidor PostgreSQL.
+
+O projeto usa os tipos `vector` e `halfvec` e índices HNSW. O tipo `halfvec`
+requer pgvector 0.7.0 ou superior; a versão mínima documentada acima mantém o
+projeto em uma versão atualmente compatível com PostgreSQL 13 ou superior.
+
+Instalar o pacote Python `pgvector` em `requirements.txt` não instala a extensão
+no servidor PostgreSQL. Em bancos gerenciados, habilite pgvector conforme as
+instruções do provedor antes de executar as migrations.
+
+## Permissões para migrations
+
+A migration inicial executa `CREATE EXTENSION IF NOT EXISTS vector` antes de
+criar tabelas e índices que usam esses tipos. O servidor precisa ter os arquivos
+da extensão disponíveis e o usuário da migration precisa ter permissão para
+criá-la no banco. Se essas permissões forem restritas, peça ao administrador do
+banco para habilitar a extensão antes da implantação.
+
+O downgrade remove as tabelas da aplicação, mas mantém a extensão instalada,
+pois ela pode ser compartilhada com outros objetos ou aplicações no mesmo banco.
+
+## Executar migrations
+
+Configure `DATABASE_URL` com o driver `postgresql+asyncpg` e execute:
+
+```text
+alembic upgrade head
+```
+
+Confirme que as migrations terminaram com sucesso antes de iniciar a API.
