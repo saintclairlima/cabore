@@ -44,7 +44,7 @@ class MotorInferenciaService:
             return modelo
 
     async def gerar_vetor(
-        matriz_self,
+        self,
         texto: str, 
         modelo_id: str, 
         repositorio: Optional[str] = None
@@ -52,10 +52,8 @@ class MotorInferenciaService:
         """
         Gera a representação vetorial para um único texto de forma assíncrona.
         """
-        # Para referenciar a instância corretamente dentro do método:
-        # (caso prefira instanciar como objeto global)
-        resultado = await motor_inferencia.gerar_vetores_lote([texto], modelo_id, repositorio)
-        return resultado[0] if resultado else []
+        resultados = await self.gerar_vetores_lote([texto], modelo_id, repositorio)
+        return resultados[0] if resultados else []
 
     async def gerar_vetores_lote(
         self, 
