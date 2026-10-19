@@ -12,6 +12,17 @@ from app.services import aplicacao_service
 
 router = APIRouter(prefix="/aplicacoes", tags=["Aplicações e Tenants (Admin)"])
 
+@router.get("/", response_model=List[RespostaAplicacaoSchema], status_code=status.HTTP_200_OK)
+async def listar_aplicacoes_route(
+    limite: int = 50,
+    deslocamento: int = 0,
+    _: bool = Depends(verificar_admin_master),
+    sessao: AsyncSession = Depends(obter_sessao_banco)
+):
+    """Lista todas as aplicações cadastradas no sistema (Apenas Admin)."""
+    aplicacoes = await aplicacao_service.listar_aplicacoes(sessao, limite=limite, deslocamento=deslocamento)
+    return aplicacoes
+
 @router.post("/", response_model=RespostaAplicacaoSchema, status_code=status.HTTP_201_CREATED)
 async def criar_aplicacao_route(
     dados: CriarAplicacaoSchema,

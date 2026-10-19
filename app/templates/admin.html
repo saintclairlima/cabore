@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caboré — Dashboard Administrativo</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans" x-data="dashboardAdmin()">
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-bold text-slate-950">🦉</div>
+                <span class="font-semibold text-lg tracking-tight">Caboré <span class="text-xs uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/20">Control Plane</span></span>
+            </div>
+            <!-- Input para Chave Admin -->
+            <div class="flex items-center space-x-2">
+                <input type="password" x-model="adminKey" placeholder="Cole sua X-Admin-Key..." 
+                    class="bg-slate-950 border border-slate-800 text-xs px-3 py-2 rounded-lg focus:outline-none focus:border-emerald-500 w-64 text-slate-300">
+                <button @click="testarConexao()" class="bg-emerald-600 hover:bg-emerald-500 text-xs px-3 py-2 rounded-lg font-medium transition">Salvar Chave</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8 flex-1 w-full grid grid-cols-1 md:grid-cols-4 gap-6">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="space-y-1">
+            <button @click="aba = 'modelos'" :class="aba === 'modelos' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'" class="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-medium transition">
+                <span>🧠 Modelos & Memória</span>
+            </button>
+            <button @click="aba = 'aplicacoes'" :class="aba === 'aplicacoes' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'" class="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-medium transition">
+                <span>🏢 Aplicações & Tenants</span>
+            </button>
+        </aside>
+
+        <!-- Dynamic Display Panel -->
+        <section class="md:col-span-3 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 backdrop-blur">
+            
+            <!-- TAB 1: MODELOS -->
+            <div x-show="aba === 'modelos'">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold">Modelos de Embedding</h2>
+                        <p class="text-xs text-slate-400 mt-1">Gerencie os modelos suportados e monitore o cache em memória.</p>
+                    </div>
+                    <button @click="carregarModelos()" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition">Atualizar Lista</button>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4">
+                    <template x-for="modelo in modelos" :key="modelo.id">
+                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="font-semibold text-sm" x-text="modelo.nome"></span>
+                                    <span class="text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-300" x-text="modelo.id"></span>
+                                </div>
+                                <p class="text-xs text-slate-400 mt-1">Provedor: <span x-text="modelo.provedor"></span> | Dimensões: <span x-text="modelo.dimensoes"></span></p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-xs px-2.5 py-1 rounded-full font-medium" :class="modelo.ativo ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'" x-text="modelo.ativo ? 'Ativo' : 'Inativo'"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- TAB 2: APLICAÇÕES -->
+            <div x-show="aba === 'aplicacoes'" style="display: none;">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold">Aplicações & Chaves de API</h2>
+                        <p class="text-xs text-slate-400 mt-1">Visualize tenants cadastrados e gere chaves de acesso.</p>
+                    </div>
+                    <button @click="abrirModalNovaApp = true" class="bg-emerald-600 hover:bg-emerald-500 text-xs px-3 py-2 rounded-lg font-medium transition">Nova Aplicação</button>
+                </div>
+
+                <div class="space-y-4">
+                    <template x-for="app in aplicacoes" :key="app.id">
+                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-semibold text-sm" x-text="app.nome"></h3>
+                                    <p class="text-xs font-mono text-slate-500 mt-0.5" x-text="app.id"></p>
+                                </div>
+                                <button @click="listarChaves(app.id)" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition">Ver Chaves</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Script de Reatividade (Alpine.js) -->
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>
