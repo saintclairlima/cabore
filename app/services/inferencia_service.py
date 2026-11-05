@@ -1,7 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional
-import numpy as np
+from typing import Dict, List, Optional
 from sentence_transformers import SentenceTransformer
 from app.config import configuracoes
 

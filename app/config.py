@@ -7,9 +7,9 @@ from sqlalchemy.exc import ArgumentError
 
 class Configuracoes(BaseSettings):
     AMBIENTE: Literal["desenvolvimento", "producao"] = "producao"
-    DATABASE_URL: SecretStr
-    ADMIN_KEY: SecretStr
     DISPOSITIVO: str ="cpu"
+    ADMIN_KEY: SecretStr
+    DATABASE_URL: SecretStr
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -1,23 +1,25 @@
-import hashlib
-import uuid
-from enum import Enum
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from enum import Enum
+import hashlib
+from typing import Any, Dict, List, Optional
+import uuid
+
 from sqlalchemy import (
-    Enum as SQLEnum,
-    String,
     BigInteger,
-    ForeignKey,
-    UniqueConstraint,
-    func,
-    Index,
     Boolean,
+    Enum as SQLEnum,
+    ForeignKey,
+    Index,
     Integer,
     Numeric,
+    String,
+    UniqueConstraint,
+    func,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
-from pgvector.sqlalchemy import Vector, HALFVEC
+from pgvector.sqlalchemy import HALFVEC, Vector
+
 from app.database import Base
 from app.models.tipos import ConfigEmbeddingDict, MetadataDict
 
@@ -31,6 +33,7 @@ class MetricaDistancia(str, Enum):
     COSINE = "cosine"
     L2 = "l2"
     IP = "ip"
+    RRF = 'rrf'
 
 
 # Aplicações (Tenants)
@@ -104,14 +107,14 @@ class ModeloEmbedding(Base):
     )
 
     # nome mais user-friendly (pode ser uam variação do id: BGE m3, Embedding 3 - OpenAi, etc...)
-    nome: Mapped[str] = mapped_column(String(100), nullable=False)
+    nome: Mapped[str] = mapped_column(String(250), nullable=False)
     
     # nome da origem do modelo (Google, OpenAi, BAAI, etc...)
-    provedor: Mapped[str] = mapped_column(String(50), nullable=False)
+    provedor: Mapped[str] = mapped_column(String(250), nullable=False)
     dimensoes: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # identificador do repositório no Hugging Face
-    identificador_repositorio: Mapped[str] = mapped_column(String(255), nullable=True)
+    identificador_repositorio: Mapped[str] = mapped_column(String(550), nullable=True)
     metrica_distancia: Mapped[MetricaDistancia] = mapped_column(
         SQLEnum(MetricaDistancia, native_enum=False),
         nullable=False,

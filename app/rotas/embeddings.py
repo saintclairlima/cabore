@@ -1,5 +1,3 @@
-
-
 import time
 from typing import List
 import uuid
@@ -11,8 +9,19 @@ from app.database import obter_sessao_banco
 from app.limites import LIMITE_MAXIMO_ITENS_LOTE
 from app.models.modelos import Aplicacao
 from app.rotas.dependencias import obter_aplicacao_atual
-from app.schemas.schemas import InserirEmbeddingSchema, RemoverEmbeddingSchema, RequisicaoBuscaSchema
-from app.services import auditoria_service, busca_service, colecao_service, embedding_service
+from app.schemas.schemas import (
+    InserirEmbeddingSchema,
+    RemoverEmbeddingSchema,
+    RequisicaoBuscaSchema,
+    RespostaInserirEmbeddingsSchema,
+    ResultadoBuscaSchema,
+)
+from app.services import (
+    auditoria_service,
+    busca_service,
+    colecao_service,
+    embedding_service,
+)
 
 
 router = APIRouter(prefix="/embeddings", tags=["Embeddings e busca"])
@@ -23,7 +32,7 @@ async def inserir_embedding_route(
     tarefas: BackgroundTasks,
     aplicacao: Aplicacao = Depends(obter_aplicacao_atual),
     sessao: AsyncSession = Depends(obter_sessao_banco),
-):
+) -> RespostaInserirEmbeddingsSchema:
     """Insere um embedding individual com comportamento get-or-create por hash."""
     inicio = time.perf_counter()
     try:
@@ -44,13 +53,13 @@ async def inserir_embedding_route(
             colecao_id=dados.colecao_id,
         )
 
-        return {
+        return RespostaInserirEmbeddingsSchema({
             "id": str(registro.id),
             "colecao_id": str(registro.colecao_id),
             "conteudo_hash": registro.conteudo_hash,
             "metadados": registro.metadados,
             "criado_em": registro.criado_em,
-        }
+        })
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -64,10 +73,11 @@ async def inserir_embeddings_lote_route(
     ),
     aplicacao: Aplicacao = Depends(obter_aplicacao_atual),
     sessao: AsyncSession = Depends(obter_sessao_banco),
-):
+) -> List[RespostaInserirEmbeddingsSchema]:
     """Insere múltiplos embeddings em lote para uma coleção da aplicação."""
     inicio = time.perf_counter()
     try:
+        # Valida se a coleção pertence à aplicação autenticada
         colecao = await colecao_service.obter_colecao_por_id(sessao, colecao_id, aplicacao_id=aplicacao.id)
         if not colecao:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coleção não encontrada ou acesso negado.")
@@ -85,12 +95,12 @@ async def inserir_embeddings_lote_route(
         )
 
         return [
-            {
+            RespostaInserirEmbeddingsSchema({
                 "id": str(r.id),
                 "colecao_id": str(r.colecao_id),
                 "conteudo_hash": r.conteudo_hash,
-                "metadados": r.metadados,
-            }
+                "metadados": r.metadados
+            })
             for r in registros
         ]
     except ValueError as e:
@@ -103,7 +113,7 @@ async def buscar_embeddings_route(
     tarefas: BackgroundTasks,
     aplicacao: Aplicacao = Depends(obter_aplicacao_atual),
     sessao: AsyncSession = Depends(obter_sessao_banco),
-):
+) -> List[ResultadoBuscaSchema]:
     """
     Realiza busca semântica global/multi-coleções suportando modelos de dimensões mistas,
     filtragem por metadados JSONB e isolamento estrito por tenant.
@@ -112,11 +122,14 @@ async def buscar_embeddings_route(
     try:
         resultados = await busca_service.buscar_similaridade(
             sessao=sessao,
-            nomes_ou_ids_colecoes=parametros_busca.colecoes_nomes_ou_ids,
+            aplicacao_cliente=aplicacao,
             texto_consulta=parametros_busca.texto_consulta,
-            limite=parametros_busca.limite,
+            ids_colecoes=parametros_busca.ids_colecoes,
+            ids_aplicacoes=parametros_busca.ids_aplicacoes,
             filtro_metadados=parametros_busca.filtro_metadados,
-            aplicacao_id=aplicacao.id,
+            top_k_colecao=parametros_busca.top_k_colecao,
+            top_k_global=parametros_busca.top_k_global,
+            estrategia_combinacao=parametros_busca.estrategia_combinacao,
         )
 
         tempo_ms = round((time.perf_counter() - inicio) * 1000, 2)

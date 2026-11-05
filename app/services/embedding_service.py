@@ -1,12 +1,11 @@
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Type
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
 from sqlalchemy.dialects.postgresql import insert as inserir_postgresql
 from app.models.modelos import (
     Colecao,
     ModeloEmbedding,
-    MetricaDistancia,
     EmbeddingBase,
     Embedding512,
     Embedding768,
@@ -14,11 +13,11 @@ from app.models.modelos import (
     Embedding1536,
     EmbeddingHalfVec3072,
 )
-from app.schemas.schemas import InserirEmbeddingSchema, ResultadoBuscaSchema
+from app.schemas.schemas import InserirEmbeddingSchema
 from app.models.tipos import MetadataDict
 
 
-def obter_classe_embedding(dimensoes: int):
+def obter_classe_embedding(dimensoes: int)-> type[EmbeddingBase]:
     """Seleciona dinamicamente a tabela física correta com base nas dimensões do modelo."""
     mapeamento = {
         512: Embedding512,
@@ -35,7 +34,9 @@ def obter_classe_embedding(dimensoes: int):
     return classe_modelo
 
 
-async def _obter_modelo_e_classe_por_colecao(sessao: AsyncSession, colecao_id: uuid.UUID):
+async def _obter_modelo_e_classe_por_colecao(
+        sessao: AsyncSession, colecao_id: uuid.UUID
+) -> tuple[Colecao, ModeloEmbedding, Type[EmbeddingBase]]:
     """Método auxiliar para recuperar a coleção, o modelo e a classe da tabela correta."""
     consulta = (
         select(Colecao, ModeloEmbedding)
@@ -158,86 +159,6 @@ async def inserir_embeddings_lote(
     if registros_para_inserir:
         await sessao.commit()
     return registros_finais
-
-
-async def buscar_similaridade(
-    sessao: AsyncSession,
-    colecao_ids: List[uuid.UUID],
-    vetor_consulta: List[float],
-    limite: int = 10,
-    filtro_metadados: Optional[MetadataDict] = None,
-    aplicacao_id: Optional[uuid.UUID] = None,
-) -> List[ResultadoBuscaSchema]:
-    """
-    Realiza busca por similaridade de cosseno com suporte a filtro estrito por metadados JSONB.
-    """
-
-    if not colecao_ids:
-        return []
-    
-    # Valida coleção/aplicação e descobre a tabela
-    consulta_colecoes = (
-        select(Colecao, ModeloEmbedding)
-        .join(ModeloEmbedding, Colecao.modelo_embedding_id == ModeloEmbedding.id)
-        .where(Colecao.id.in_(colecao_ids))
-    )
-
-    if aplicacao_id:
-        consulta_colecoes = consulta_colecoes.where(Colecao.aplicacao_id == aplicacao_id)
-
-    resultado_colecoes = await sessao.execute(consulta_colecoes)
-    linhas_colecoes = resultado_colecoes.all()
-
-    if not linhas_colecoes:
-        raise ValueError("Coleção não encontrada ou acesso negado.")
-
-    for linha in linhas_colecoes:
-        if linha.ModeloEmbedding.metrica_distancia != MetricaDistancia.COSINE:
-            raise ValueError(
-                f"O modelo '{linha.ModeloEmbedding.id}' está configurado com uma métrica "
-                "não suportada pela busca. Configure a métrica cosine."
-            )
-
-    # Valida se há mistura de dimensões incompatíveis na mesma busca
-    dimensoes = linhas_colecoes[0].ModeloEmbedding.dimensoes
-
-    for linha in linhas_colecoes:
-        if linha.ModeloEmbedding.dimensoes != dimensoes:
-            raise ValueError(
-                "Não é permitido buscar simultaneamente em coleções com modelos de dimensões diferentes."
-            )
-        
-    if len(vetor_consulta) != dimensoes:
-        raise ValueError(f"Dimensões do vetor de consulta ({len(vetor_consulta)}) incompatíveis com o modelo ({dimensoes}).")
-
-    classe_embedding = obter_classe_embedding(dimensoes)
-    distancia = classe_embedding.vetor.cosine_distance(vetor_consulta).label("distancia")
-
-    consulta_busca = (
-        select(classe_embedding, distancia)
-        .where(classe_embedding.colecao_id.in_(colecao_ids))
-    )
-
-    # Aplica filtro JSONB se fornecido (aproveita o índice GIN criado no model)
-    if filtro_metadados:
-        consulta_busca = consulta_busca.where(classe_embedding.metadados.contains(filtro_metadados))
-
-    consulta_busca = consulta_busca.order_by(distancia).limit(limite)
-
-    resultado = await sessao.execute(consulta_busca)
-    linhas = resultado.all()
-
-    resultados: List[ResultadoBuscaSchema] = []
-    for registro, dist in linhas:
-        resultados.append({
-            "id": str(registro.id),
-            "colecao_id": str(registro.colecao_id),
-            "conteudo_hash": registro.conteudo_hash,
-            "distancia": float(dist),
-            "metadados": registro.metadados,
-            "criado_em": registro.criado_em,
-        })
-    return resultados
 
 
 async def atualizar_embedding_metadados(

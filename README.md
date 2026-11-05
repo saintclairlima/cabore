@@ -1,10 +1,10 @@
-# Caboré
+﻿# Caboré
 
 **API assíncrona de busca semântica e recomendação baseada em embeddings.**
 
 Caboré é um serviço HTTP para organizar coleções vetoriais por aplicação (tenant), armazenar embeddings com metadados e consultar conteúdos semanticamente próximos a partir de texto. O projeto combina FastAPI, PostgreSQL, pgvector e modelos de embedding executados localmente por `sentence-transformers`.
 
-> **Banco de dados:** a migration inicial `0da3b9845fd9` habilita a extensão `vector` com `CREATE EXTENSION IF NOT EXISTS` e cria as tabelas e os índices da aplicação. O servidor PostgreSQL precisa ter pgvector instalado e o usuário da migration deve ter permissão para criar a extensão, caso ainda não esteja habilitada. As migrations não são executadas automaticamente na inicialização da API.
+> **Banco de dados:** a migration inicial `6fc3236d6e1c` habilita a extensão `vector` com `CREATE EXTENSION IF NOT EXISTS` e cria as tabelas e os índices da aplicação. O servidor PostgreSQL precisa ter pgvector instalado e o usuário da migration deve ter permissão para criar a extensão, caso ainda não esteja habilitada. As migrations não são executadas automaticamente na inicialização da API.
 
 ## Índice
 
@@ -45,8 +45,8 @@ O fluxo geral de uma busca é:
 2. A API resolve as coleções solicitadas dentro do escopo dessa aplicação.
 3. As coleções são agrupadas pelo modelo de embedding associado.
 4. O serviço de inferência carrega (se necessário) o modelo configurado e transforma o texto da consulta em um vetor.
-5. A consulta usa a tabela correspondente à dimensão, aplica filtros JSONB e ordena os resultados pela distância de cosseno.
-6. Os resultados dos grupos são reunidos e limitados ao `limite` global pedido.
+5. A consulta usa a tabela correspondente à dimensão, aplica filtros JSONB e ordena os resultados pela métrica configurada no modelo (`cosine`, `l2` ou `ip`).
+6. Os resultados dos grupos podem ser mantidos na ordem de distância ou combinados por RRF e limitados por `top_k_global`.
 
 As rotas HTTP ficam em `app/rotas/`; regras de negócio e acesso aos dados são separados em `app/services/`. Os modelos SQLAlchemy descrevem o schema esperado, enquanto Alembic é configurado para gerenciar suas alterações.
 
@@ -118,7 +118,7 @@ As configurações são validadas durante a inicialização. Valores incorretos 
 
 ## Banco de dados e migrations
 
-Os modelos em `app/models/modelos.py` descrevem tabelas para aplicações, chaves, modelos de embedding, coleções, embeddings e auditoria. A revisão `0da3b9845fd9` materializa esse schema, incluindo chaves estrangeiras, restrições, índices HNSW e GIN e as tabelas de embeddings para cada dimensão suportada. O tipo `vector` é usado para dimensões de até 1536; a dimensão 3072 usa `halfvec`.
+Os modelos em `app/models/modelos.py` descrevem tabelas para aplicações, chaves, modelos de embedding, coleções, embeddings e auditoria. A revisão `6fc3236d6e1c` materializa esse schema, incluindo chaves estrangeiras, restrições, índices HNSW e GIN e as tabelas de embeddings para cada dimensão suportada. O tipo `vector` é usado para dimensões de até 1536; a dimensão 3072 usa `halfvec`.
 
 O ambiente Alembic carrega a URL de `DATABASE_URL`. A migration executa `CREATE EXTENSION IF NOT EXISTS vector` antes de criar as tabelas, habilitando pgvector no banco se a extensão ainda não estiver habilitada. Para isso, os arquivos da extensão devem estar instalados no servidor PostgreSQL, e o usuário usado pela migration precisa ter as permissões necessárias. Em bancos gerenciados ou com permissões restritas, solicite ao provedor ou administrador que disponibilize/habilite pgvector.
 
@@ -174,10 +174,19 @@ O campo `publica` de uma coleção é metadado de visibilidade no modelo. As rot
 
 Todas as rotas funcionais abaixo são prefixadas por `/v1`. Os endpoints de administração exigem `X-Admin-Key`; endpoints tenant exigem `X-API-Key`. As rotas de leitura de modelos indicadas como públicas não exigem nenhum desses headers.
 
+### Painel administrativo
+
+Acesse `/v1/admin/` para abrir o painel. Ele usa a `ADMIN_KEY` existente, armazenada somente na sessão do navegador; não cria uma conta ou senha de administrador. O painel oferece visão geral da auditoria, gerenciamento de aplicações, emissão/revogação de chaves e cadastro/edição de modelos. Em produção, publique o painel exclusivamente atrás de HTTPS.
+
+O dashboard consulta `GET /v1/admin/analytics?dias=30` com `X-Admin-Key`. O parâmetro `dias` aceita valores entre 7 e 90. A resposta reúne totais, latência média e P95, resultados retornados, atividade diária, operações, aplicações mais ativas e as 15 requisições mais recentes. A auditoria registra apenas as operações que a API instrumenta atualmente; ela não representa falhas que não tenham sido registradas.
+
 ### Aplicações e chaves — administração
 
 | Método | Caminho | Descrição |
 |---|---|---|
+| `GET` | `/v1/admin/` | Entrega a interface do painel administrativo. |
+| `GET` | `/v1/admin/analytics?dias=30` | Retorna os indicadores e eventos da auditoria; exige `X-Admin-Key`. |
+| `GET` | `/v1/aplicacoes/?limite=50&deslocamento=0` | Lista aplicações com paginação simples; exige `X-Admin-Key`. |
 | `POST` | `/v1/aplicacoes/` | Cria uma aplicação (tenant). |
 | `POST` | `/v1/aplicacoes/chaves` | Emite uma chave de API; a chave plana é retornada apenas nesta resposta. |
 | `GET` | `/v1/aplicacoes/{aplicacao_id}/chaves` | Lista as chaves da aplicação, sem revelar os valores secretos. |
@@ -211,7 +220,7 @@ A resposta de criação da chave inclui `chave_api` e uma mensagem para armazen�
 |---|---|---|---|
 | `GET` | `/v1/modelos/` | Público | Lista modelos cadastrados (`limite` padrão 50, máximo 100; `deslocamento` padrão 0). |
 | `GET` | `/v1/modelos/{modelo_id}` | Público | Consulta um modelo pelo identificador. |
-| `POST` | `/v1/modelos/` | Admin | Cadastra um modelo; dimensões aceitas: 512, 768, 1024, 1536 ou 3072. |
+| `POST` | `/v1/modelos/` | Admin | Cadastra um modelo; dimensões aceitas: 512, 768, 1024, 1536 ou 3072; métrica aceita: `cosine`, `l2` ou `ip`. |
 | `PATCH` | `/v1/modelos/{modelo_id}` | Admin | Atualiza nome, provedor, repositório, métrica e estado ativo. |
 
 O identificador `modelo_id` também é usado na configuração de coleções. Para a inferência local, informe `identificador_repositorio` quando o nome do repositório não coincidir com o identificador usado pela aplicação.
@@ -248,7 +257,7 @@ Use um modelo já cadastrado, com dimensão compatível com o modelo realmente u
 | Método | Caminho | Descrição |
 |---|---|---|
 | `POST` | `/v1/embeddings/` | Insere um embedding; exige `colecao_id`, `texto_referencia` e `vetor`. |
-| `POST` | `/v1/embeddings/lote?colecao_id={uuid}` | Insere uma lista de embeddings para a coleção indicada. |
+| `POST` | `/v1/embeddings/lote?colecao_id={uuid}` | Insere entre 1 e 100 embeddings para a coleção indicada. O corpo é uma lista JSON. |
 | `POST` | `/v1/embeddings/buscar` | Busca por texto em uma ou mais coleções. |
 | `DELETE` | `/v1/embeddings/{embedding_id}` | Remove um embedding; o corpo JSON deve informar `colecao_id`. |
 
@@ -275,16 +284,20 @@ curl -X POST http://127.0.0.1:8000/v1/embeddings/buscar \
   -H "X-API-Key: cb_sua_chave_de_aplicacao" \
   -H "Content-Type: application/json" \
   -d '{
-    "colecoes_nomes_ou_ids": ["documentos"],
     "texto_consulta": "Como configurar o serviço?",
-    "limite": 10,
+    "ids_colecoes": ["f4fad35c-ef24-44a8-8743-d611ecafcee6"],
+    "top_k_colecao": 10,
+    "top_k_global": 20,
+    "estrategia_combinacao": "none",
     "filtro_metadados": {"categoria": "guia"}
   }'
 ```
 
-No corpo de busca, `colecoes_nomes_ou_ids` aceita entre 1 e 50 identificadores, `texto_consulta` é obrigatório e `limite` aceita valores entre 1 e 100 (padrão 10). Use identificadores do mesmo tipo em uma consulta: a implementação decide se interpreta a lista como UUIDs ou nomes a partir do primeiro item. A consulta semântica é gerada pelo serviço local de inferência; para cada modelo consultado, o processo precisa conseguir carregar seu modelo/repositório.
+No corpo de busca, `texto_consulta` é obrigatório. `ids_colecoes` e `ids_aplicacoes` são listas opcionais de UUIDs, com até 50 itens; não os envie simultaneamente. Quando `ids_colecoes` é informado, a busca aceita coleções próprias ou públicas. Com `ids_aplicacoes`, são consideradas coleções das aplicações informadas e públicas segundo o escopo descrito pela API. Sem nenhum identificador, a busca considera coleções próprias e coleções públicas.
 
-A resposta de busca inclui, para cada resultado, `id`, `colecao_id`, `conteudo_hash`, `distancia`, `metadados` e `criado_em`. A distância menor representa maior proximidade segundo a métrica de cosseno. Os vetores retornados não são incluídos.
+`top_k_colecao` deve estar entre 1 e 100 e usa 10 por padrão. `top_k_global`, quando informado, deve ser maior que zero. `estrategia_combinacao` aceita `none` ou `rrf`; o modo RRF combina os rankings por conteúdo distinto e preserva as ocorrências selecionadas. A consulta semântica é gerada pelo serviço local de inferência; para cada modelo consultado, o processo precisa conseguir carregar seu modelo/repositório.
+
+A resposta de busca inclui, para cada resultado, `id`, `colecao_id`, `conteudo_hash`, `distancia`, `metrica_distancia`, `score_relevancia`, `nome_modelo`, `modelo_dimensoes`, `metadados` e `criado_em`. Em `rrf`, `score_relevancia` contém o score calculado; fora desse modo, seu valor é `null`. Os vetores retornados não são incluídos.
 
 Erros de validação de entrada retornam HTTP `422`; os demais status dependem da operação e são descritos também no OpenAPI. Erros comuns incluem credenciais inválidas (`401`/`403`), recurso não encontrado (`404`), conflito de nomes de chave (`409`) e dados semanticamente inválidos (`400`).
 
@@ -292,8 +305,9 @@ Erros de validação de entrada retornam HTTP `422`; os demais status dependem d
 
 - A busca aceita texto, não um vetor de consulta enviado pelo cliente.
 - O vetor da consulta é produzido com `sentence-transformers` usando o modelo associado a cada coleção solicitada.
-- Coleções de modelos diferentes podem participar da mesma busca global; a aplicação consulta cada grupo por modelo e junta os resultados.
-- Apenas a métrica `cosine` é aceita pelo fluxo atual.
+- Coleções de modelos diferentes podem participar da mesma busca global; a aplicação gera uma consulta por modelo, consulta cada grupo e combina os resultados.
+- Cada modelo pode usar a métrica `cosine`, `l2` ou `ip`. A interpretação da distância deve considerar a métrica registrada; o resultado não presume cosseno em todos os modelos.
+- A combinação global pode ser desativada (`none`) ou usar Reciprocal Rank Fusion (`rrf`).
 - Metadados são filtrados por contenção JSONB; informe um objeto JSON que deve estar contido nos metadados do resultado.
 - O sistema limita os resultados por grupo e depois ordena e aplica o limite global informado.
 - A inserção não invoca o serviço de inferência: a aplicação cliente deve calcular e enviar os vetores compatíveis com o modelo da coleção.
@@ -316,7 +330,7 @@ O hash de deduplicação é calculado a partir do texto de referência após `st
 - Texto de referência e texto de consulta: até **8192 caracteres**; não podem ser vazios ou conter apenas espaços.
 - Vetor: entre 1 e **3072** valores finitos; a dimensão exata também precisa corresponder ao modelo.
 - Lote de inserção: entre 1 e **100** itens.
-- Busca: entre 1 e **50** coleções; até **100** resultados.
+- Busca: até **50** identificadores por lista; `top_k_colecao` entre 1 e **100**; `top_k_global`, quando informado, deve ser maior que zero.
 - Dimensões cadastráveis: **512**, **768**, **1024**, **1536** e **3072**.
 - Nomes de aplicação, coleção e chave: até **100 caracteres**.
 - Os campos de metadados/configuração são objetos JSON.

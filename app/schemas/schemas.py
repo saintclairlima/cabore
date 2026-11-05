@@ -1,16 +1,22 @@
 from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 import uuid
-from typing import  Any, Dict, List, Literal, Optional, TypedDict
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 from app.limites import (
     LIMITE_MAXIMO_COLECOES_BUSCA,
     LIMITE_MAXIMO_DIMENSAO_VETOR,
     LIMITE_MAXIMO_TEXTO,
 )
 from app.models.modelos import MetricaDistancia, TipoArmazenamento
-from app.models.tipos import ConfigEmbeddingDict, IdentificadorColecao, MetadataDict, ValorVetor
-
-MetricaDistanciaSuportada = Literal[MetricaDistancia.COSINE]
+from app.models.tipos import (
+    ConfigEmbeddingDict,
+    EstrategiaCombinacao,
+    IdentificadorColecao,
+    MetadataDict,
+    ValorVetor,
+)
 
 
 class CriarAplicacaoSchema(BaseModel):
@@ -52,7 +58,7 @@ class CriarModeloEmbeddingSchema(BaseModel):
         ..., description="Dimensão suportada pelo armazenamento vetorial"
     )
     identificador_repositorio: Optional[str] = Field(None, max_length=255, description="Repositório Hugging Face opcional")
-    metrica_distancia: MetricaDistanciaSuportada = MetricaDistancia.COSINE
+    metrica_distancia: MetricaDistancia = MetricaDistancia.COSINE
 
 class RespostaModeloEmbeddingSchema(BaseModel):
     id: str
@@ -70,8 +76,8 @@ class AtualizarModeloEmbeddingSchema(BaseModel):
     nome: Optional[str] = Field(None, max_length=100, description="Novo nome amigável do modelo")
     provedor: Optional[str] = Field(None, max_length=50, description="Novo provedor")
     identificador_repositorio: Optional[str] = Field(None, max_length=255, description="Novo repositório Hugging Face")
-    metrica_distancia: Optional[MetricaDistanciaSuportada] = Field(
-        None, description="Métrica de distância suportada: cosine"
+    metrica_distancia: Optional[MetricaDistancia] = Field(
+        None, description="Métrica de distância suportada: cosine, l2 ou ip"
     )
     ativo: Optional[bool] = Field(None, description="Situação do modelo (ativo ou não)")
 
@@ -134,17 +140,28 @@ class InserirEmbeddingSchema(BaseModel):
             raise ValueError("texto_referencia não pode conter apenas espaços.")
         return texto
 
+class RespostaInserirEmbeddingsSchema(BaseModel):
+    id: uuid.UUID
+    colecao_id: uuid.UUID
+    conteudo_hash: str
+    metadados: MetadataDict
+
 class RemoverEmbeddingSchema(BaseModel):
     colecao_id: uuid.UUID
 
 class RequisicaoBuscaSchema(BaseModel):
-    colecoes_nomes_ou_ids: List[IdentificadorColecao] = Field(
-        ..., min_length=1, max_length=LIMITE_MAXIMO_COLECOES_BUSCA
-    )
     texto_consulta: str = Field(
         ..., min_length=1, max_length=LIMITE_MAXIMO_TEXTO
     )
-    limite: int = Field(default=10, ge=1, le=100)
+    ids_colecoes: Optional[List[IdentificadorColecao]] = Field(
+        default=None, max_length=LIMITE_MAXIMO_COLECOES_BUSCA
+    )
+    ids_aplicacoes: Optional[List[IdentificadorColecao]] = Field(
+        default=None, max_length=LIMITE_MAXIMO_COLECOES_BUSCA
+    )
+    top_k_colecao: int = Field(default=10, ge=1, le=100)
+    top_k_global: Optional[int] = Field(default=None)
+    estrategia_combinacao: EstrategiaCombinacao = Field(default=EstrategiaCombinacao.NONE)
     filtro_metadados: Optional[Dict[str, Any]] = None
 
     @field_validator("texto_consulta")
@@ -154,19 +171,25 @@ class RequisicaoBuscaSchema(BaseModel):
             raise ValueError("texto_consulta não pode conter apenas espaços.")
         return texto
 
-    @field_validator("colecoes_nomes_ou_ids")
+    @field_validator("ids_colecoes", "ids_aplicacoes", mode="before")
     @classmethod
-    def validar_identificadores_colecoes(
-        cls, colecoes: List[str]
-    ) -> List[str]:
-        if any(not colecao.strip() for colecao in colecoes):
-            raise ValueError("Os nomes ou IDs das coleções não podem ser vazios.")
-        return colecoes
+    def validar_identificadores(
+        cls, valores: Optional[List[Any]]
+    ) -> Optional[List[Any]]:
+        if valores is None:
+            return None
+        if any(not str(val).strip() for val in valores):
+            raise ValueError("Os identificadores não podem ser vazios.")
+        return valores
 
 class ResultadoBuscaSchema(TypedDict):
     id: str
     colecao_id: str
     conteudo_hash: str
-    distancia: float
-    metadados: Dict[str, Any]
+    distancia: Optional[float]
+    metrica_distancia: MetricaDistancia
+    score_relevancia: Optional[float] = None
+    nome_modelo: Optional[str]
+    modelo_dimensoes: Optional[int]
+    metadados: MetadataDict
     criado_em: datetime

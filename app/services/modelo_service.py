@@ -10,22 +10,23 @@ async def criar_modelo_embedding(
     sessao: AsyncSession, dados: CriarModeloEmbeddingSchema
 ) -> ModeloEmbedding:
     """Cadastra um novo modelo de embedding no sistema."""
-    
-    # 1. Valida se já existe um modelo com o mesmo ID exato
-    existente = await obter_modelo_por_id(sessao, dados.id)
-    if existente:
-        raise ValueError(f"Já existe um modelo de embedding cadastrado com o ID '{dados.id}'.")
 
-    # 2. Persiste o novo modelo
+    modelo_id = dados.id.strip()
+    existente = await sessao.scalar(
+        select(ModeloEmbedding).where(ModeloEmbedding.id == modelo_id)
+    )
+    if existente:
+        raise ValueError(f"Já existe um modelo de embedding cadastrado com o ID '{modelo_id}'.")
+
     novo_modelo = ModeloEmbedding(
-        id=dados.id.strip(),
+        id=modelo_id,
         nome=dados.nome.strip(),
         provedor=dados.provedor.strip(),
         dimensoes=dados.dimensoes,
         identificador_repositorio=dados.identificador_repositorio.strip() if dados.identificador_repositorio else None,
         metrica_distancia=dados.metrica_distancia,
     )
-    
+
     sessao.add(novo_modelo)
     await sessao.commit()
     await sessao.refresh(novo_modelo)
