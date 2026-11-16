@@ -1,7 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional
-import numpy as np
+from typing import Dict, List, Optional
 from sentence_transformers import SentenceTransformer
 from app.config import configuracoes
 
@@ -94,6 +93,16 @@ class MotorInferenciaService:
         else:
             self._cache_modelos.clear()
             logger.info("Cache de modelos limpo completamente.")
+
+    def obter_status(self) -> dict:
+        modelos_carregados = list(self._cache_modelos.keys())
+
+        return {
+            "inicializado": True,
+            "dispositivo": self._dispositivo,
+            "quantidade_modelos_carregados": len(modelos_carregados),
+            "modelos_carregados": modelos_carregados,
+        }
 
 # Instância singleton global pronta para injeção ou importação direta
 motor_inferencia = MotorInferenciaService()

@@ -1,23 +1,25 @@
-import hashlib
-import uuid
-from enum import Enum
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from enum import Enum
+import hashlib
+from typing import Any, Dict, List, Optional
+import uuid
+
 from sqlalchemy import (
-    Enum as SQLEnum,
-    String,
     BigInteger,
-    ForeignKey,
-    UniqueConstraint,
-    func,
-    Index,
     Boolean,
+    Enum as SQLEnum,
+    ForeignKey,
+    Index,
     Integer,
     Numeric,
+    String,
+    UniqueConstraint,
+    func,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
-from pgvector.sqlalchemy import Vector, HALFVEC
+from pgvector.sqlalchemy import HALFVEC, Vector
+
 from app.database import Base
 from app.models.tipos import ConfigEmbeddingDict, MetadataDict
 
@@ -31,6 +33,7 @@ class MetricaDistancia(str, Enum):
     COSINE = "cosine"
     L2 = "l2"
     IP = "ip"
+    RRF = 'rrf'
 
 
 # Aplicações (Tenants)
@@ -104,14 +107,14 @@ class ModeloEmbedding(Base):
     )
 
     # nome mais user-friendly (pode ser uam variação do id: BGE m3, Embedding 3 - OpenAi, etc...)
-    nome: Mapped[str] = mapped_column(String(100), nullable=False)
+    nome: Mapped[str] = mapped_column(String(250), nullable=False)
     
     # nome da origem do modelo (Google, OpenAi, BAAI, etc...)
-    provedor: Mapped[str] = mapped_column(String(50), nullable=False)
+    provedor: Mapped[str] = mapped_column(String(250), nullable=False)
     dimensoes: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # identificador do repositório no Hugging Face
-    identificador_repositorio: Mapped[str] = mapped_column(String(255), nullable=True)
+    identificador_repositorio: Mapped[str] = mapped_column(String(550), nullable=True)
     metrica_distancia: Mapped[MetricaDistancia] = mapped_column(
         SQLEnum(MetricaDistancia, native_enum=False),
         nullable=False,
@@ -255,6 +258,27 @@ class EmbeddingHalfVectorBase(EmbeddingBase):
         return cls.indices_padrao(op_hnsw="halfvec_cosine_ops")
 
 
+# Tabela Vector de 256 dimensões
+class Embedding256(EmbeddingVectorBase):
+    __tablename__ = "embeddings_256"
+
+    vetor: Mapped[list[float]] = mapped_column("embedding", Vector(256), nullable=False)
+
+
+# Tabela Vector de 512 dimensões
+class Embedding512(EmbeddingVectorBase):
+    __tablename__ = "embeddings_512"
+
+    vetor: Mapped[list[float]] = mapped_column("embedding", Vector(512), nullable=False)
+
+
+# Tabela Vector de 768 dimensões
+class Embedding768(EmbeddingVectorBase):
+    __tablename__ = "embeddings_768"
+
+    vetor: Mapped[list[float]] = mapped_column("embedding", Vector(768), nullable=False)
+
+
 class Embedding1024(EmbeddingVectorBase):
     __tablename__ = "embeddings_1024"
 
@@ -270,20 +294,6 @@ class Embedding1536(EmbeddingVectorBase):
     vetor: Mapped[list[float]] = mapped_column(
         "embedding", Vector(1536), nullable=False
     )
-
-
-# Tabela Vector de 512 dimensões
-class Embedding512(EmbeddingVectorBase):
-    __tablename__ = "embeddings_512"
-
-    vetor: Mapped[list[float]] = mapped_column("embedding", Vector(512), nullable=False)
-
-
-# Tabela Vector de 768 dimensões
-class Embedding768(EmbeddingVectorBase):
-    __tablename__ = "embeddings_768"
-
-    vetor: Mapped[list[float]] = mapped_column("embedding", Vector(768), nullable=False)
 
 
 # Tabela HalfVec de 3072 dimensões

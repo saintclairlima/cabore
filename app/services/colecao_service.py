@@ -129,6 +129,55 @@ async def atualizar_colecao(
     return resultado.scalar_one_or_none()
 
 
+async def atualizar_colecao_admin(
+    sessao: AsyncSession,
+    colecao_id: uuid.UUID,
+    dados: AtualizarColecaoSchema,
+) -> Optional[Colecao]:
+    """Atualiza uma coleção em qualquer aplicação, no escopo administrativo."""
+
+    colecao = await obter_colecao_por_id(sessao, colecao_id)
+
+    if not colecao:
+        return None
+
+    valores_atualizacao = dados.model_dump(exclude_unset=True)
+
+    if not valores_atualizacao:
+        return colecao
+
+    if "nome" in valores_atualizacao:
+        nome = valores_atualizacao["nome"]
+
+        if nome is None or not nome.strip():
+            raise ValueError("O nome da coleção não pode ser vazio.")
+
+        nome = nome.strip()
+
+        consulta_nome = select(Colecao.id).where(
+            Colecao.aplicacao_id == colecao.aplicacao_id,
+            func.lower(Colecao.nome) == nome.lower(),
+            Colecao.id != colecao_id,
+        )
+
+        resultado_nome = await sessao.execute(consulta_nome)
+
+        if resultado_nome.scalar_one_or_none():
+            raise ValueError(
+                f"Já existe uma coleção com o nome '{nome}' nesta aplicação."
+            )
+
+        valores_atualizacao["nome"] = nome
+
+    for campo, valor in valores_atualizacao.items():
+        setattr(colecao, campo, valor)
+
+    await sessao.commit()
+    await sessao.refresh(colecao)
+
+    return colecao
+
+
 async def remover_colecao(
     sessao: AsyncSession, colecao_id: uuid.UUID, aplicacao_id: uuid.UUID
 ) -> bool:
@@ -140,6 +189,16 @@ async def remover_colecao(
         Colecao.id == colecao_id,
         Colecao.aplicacao_id == aplicacao_id
     )
+    resultado = await sessao.execute(stmt)
+    await sessao.commit()
+    return resultado.rowcount > 0
+
+
+async def remover_colecao_admin(
+    sessao: AsyncSession, colecao_id: uuid.UUID
+) -> bool:
+    """Remove uma coleção sem restringir por tenant; uso exclusivo da administração."""
+    stmt = delete(Colecao).where(Colecao.id == colecao_id)
     resultado = await sessao.execute(stmt)
     await sessao.commit()
     return resultado.rowcount > 0

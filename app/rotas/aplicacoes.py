@@ -1,12 +1,12 @@
 from typing import List
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import obter_sessao_banco
 from app.rotas.dependencias import verificar_admin_master
-from app.schemas.schemas import CriarAplicacaoSchema, CriarChaveAPISchema, RespostaAplicacaoSchema, RespostaChaveAPISchema, RespostaCriacaoChaveSchema
+from app.schemas.schemas import AtualizarStatusAplicacaoPayload, CriarAplicacaoSchema, CriarChaveAPISchema, RespostaAplicacaoSchema, RespostaChaveAPISchema, RespostaCriacaoChaveSchema
 from app.services import aplicacao_service
 
 
@@ -22,6 +22,37 @@ async def listar_aplicacoes_route(
     """Lista todas as aplicações cadastradas no sistema (Apenas Admin)."""
     aplicacoes = await aplicacao_service.listar_aplicacoes(sessao, limite=limite, deslocamento=deslocamento)
     return aplicacoes
+
+
+@router.get(
+    "/{aplicacao_id}/detalhes",
+    status_code=status.HTTP_200_OK,
+)
+async def obter_detalhes_aplicacao_route(
+    aplicacao_id: uuid.UUID = Path(
+        ...,
+        description="UUID da aplicação",
+    ),
+    _: bool = Depends(verificar_admin_master),
+    sessao: AsyncSession = Depends(obter_sessao_banco),
+    dias: int = Query(default=30, ge=7, le=90),
+):
+    """Retorna os detalhes e recursos associados a uma aplicação."""
+
+    detalhes = await aplicacao_service.obter_detalhes_aplicacao(
+        sessao=sessao,
+        aplicacao_id=aplicacao_id,
+        dias=dias,
+    )
+
+    if detalhes is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aplicação não encontrada.",
+        )
+
+    return detalhes
+
 
 @router.post("/", response_model=RespostaAplicacaoSchema, status_code=status.HTTP_201_CREATED)
 async def criar_aplicacao_route(
@@ -104,6 +135,35 @@ async def atualizar_aplicacao_route(
         return aplicacao
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch("/{aplicacao_id}/status")
+async def atualizar_status_aplicacao(
+    aplicacao_id: uuid.UUID,
+    payload: AtualizarStatusAplicacaoPayload,
+    sessao: AsyncSession = Depends(obter_sessao_banco),
+    _: None = Depends(verificar_admin_master),
+):
+    atualizada = await aplicacao_service.atualizar_status_aplicacao(
+        sessao=sessao,
+        aplicacao_id=aplicacao_id,
+        ativa=payload.ativa,
+    )
+
+    if not atualizada:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aplicação não encontrada.",
+        )
+
+    return {
+        "mensagem": (
+            "Aplicação reativada com sucesso."
+            if payload.ativa
+            else "Aplicação suspensa com sucesso."
+        ),
+        "ativa": payload.ativa,
+    }
 
 
 @router.delete("/{aplicacao_id}", status_code=status.HTTP_200_OK)

@@ -1,104 +1,569 @@
-<!DOCTYPE html>
-<html lang="pt-BR" class="dark">
+<!doctype html>
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Caboré — Dashboard Administrativo</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f4">
+    <title>Caboré · Administração</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=admin_panel_settings" />
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans" x-data="dashboardAdmin()">
-    <!-- Header -->
-    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-bold text-slate-950">🦉</div>
-                <span class="font-semibold text-lg tracking-tight">Caboré <span class="text-xs uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/20">Control Plane</span></span>
+<body>
+    <section class="auth-screen" id="auth-screen" aria-label="Acesso administrativo">
+        <form class="auth-card" id="auth-form">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <span class="material-symbols-outlined">admin_panel_settings</span>
+                </span>
+                <span>Caboré<small>Administração</small></span>
             </div>
-            <!-- Input para Chave Admin -->
-            <div class="flex items-center space-x-2">
-                <input type="password" x-model="adminKey" placeholder="Cole sua X-Admin-Key..." 
-                    class="bg-slate-950 border border-slate-800 text-xs px-3 py-2 rounded-lg focus:outline-none focus:border-emerald-500 w-64 text-slate-300">
-                <button @click="testarConexao()" class="bg-emerald-600 hover:bg-emerald-500 text-xs px-3 py-2 rounded-lg font-medium transition">Salvar Chave</button>
+            <div class="eyebrow">Área restrita</div>
+            <h1>Acesse o painel</h1>
+            <p class="subtitle">Informe a chave master de administração para gerenciar sua API.</p>
+            <div class="field">
+                <label for="admin-key">Chave de administração</label>
+                <input id="admin-key" type="password" autocomplete="current-password" placeholder="ADMIN_KEY" required>
             </div>
-        </div>
-    </header>
+            <div class="error-banner" id="auth-error" role="alert"></div>
+            <button class="button primary" type="submit" id="auth-submit">Entrar no painel</button>
+            <div class="auth-foot">A chave permanece apenas nesta sessão. Em produção, publique o painel atrás de HTTPS.</div>
+        </form>
+    </section>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 py-8 flex-1 w-full grid grid-cols-1 md:grid-cols-4 gap-6">
-        
-        <!-- Sidebar Navigation -->
-        <aside class="space-y-1">
-            <button @click="aba = 'modelos'" :class="aba === 'modelos' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'" class="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-medium transition">
-                <span>🧠 Modelos & Memória</span>
-            </button>
-            <button @click="aba = 'aplicacoes'" :class="aba === 'aplicacoes' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'" class="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-medium transition">
-                <span>🏢 Aplicações & Tenants</span>
-            </button>
-        </aside>
+    <div class="shell hidden" id="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <span class="material-symbols-outlined">admin_panel_settings</span>
+                </span>
+                <span>Caboré<small>Administração</small></span>
+            </div>
+            <div class="top-actions">
+                <span class="connection">Conectado ao serviço</span>
+                <button class="icon-button" id="logout-button" aria-label="Sair" title="Sair da sessão">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10m4-3 4-4-4-4m4 4H9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+        </header>
+        <div class="layout">
+            <aside class="sidebar">
+                <div class="side-label">Workspace</div>
+                <nav class="nav-list" aria-label="Navegação principal">
+                    <button class="nav-item active" data-view="dashboard">
+                        <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/></svg>Visão geral
+                    </button>
+                    <button class="nav-item" data-view="applications">
+                        <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4" width="17" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 8h8M8 12h5m-5 4h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Aplicações
+                    </button>
+                    <button class="nav-item" data-view="collections">
+                        <svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5h16v4H4zM4 14.5h16v4H4z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 7.5h.01M8 16.5h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>Coleções
+                    </button>
+                    <button class="nav-item" data-view="keys">
+                        <svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="15.5" r="4.5" stroke="currentColor" stroke-width="1.7"/><path d="m11.3 12.2 8-8 2.5 2.5-2 2-1.5-1.5-2 2 1.5 1.5-2 2-1.5-1.5-1.7 1.7" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Chaves de API
+                    </button>
+                    <button class="nav-item" data-view="models">
+                        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5 20 8v8l-8 4.5L4 16V8l8-4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m4.5 8.2 7.5 4.3 7.5-4.3M12 12.5v7.8" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Modelos
+                    </button>
+                    <button class="nav-item" data-view="infrastructure">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="4" width="18" height="6" rx="1.5"
+                                stroke="currentColor" stroke-width="1.7"/>
+                            <rect x="3" y="14" width="18" height="6" rx="1.5"
+                                stroke="currentColor" stroke-width="1.7"/>
+                            <path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"
+                                stroke="currentColor" stroke-width="1.7"
+                                stroke-linecap="round"/>
+                        </svg>
+                        Infraestrutura
+                    </button>
+                </nav>
+                <div class="side-note"><strong>Operação segura</strong>As chaves completas de API são exibidas somente no momento da criação. O painel não as armazena.</div>
+            </aside>
 
-        <!-- Dynamic Display Panel -->
-        <section class="md:col-span-3 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 backdrop-blur">
-            
-            <!-- TAB 1: MODELOS -->
-            <div x-show="aba === 'modelos'">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-xl font-bold">Modelos de Embedding</h2>
-                        <p class="text-xs text-slate-400 mt-1">Gerencie os modelos suportados e monitore o cache em memória.</p>
+            <main class="content">
+                <section class="view" id="view-dashboard">
+                    <div class="page-head">
+                        <div><div class="eyebrow">Monitoramento</div><h1>Visão geral</h1><p class="subtitle">Acompanhe o uso e a saúde operacional da sua API.</p></div>
+                        <div class="actions">
+                            <select class="select" id="period-select" aria-label="Período do dashboard">
+                                <option value="7">Últimos 7 dias</option>
+                                <option value="30" selected>Últimos 30 dias</option>
+                                <option value="90">Últimos 90 dias</option>
+                            </select>
+                            <button class="button" data-action="refresh-dashboard"><svg viewBox="0 0 24 24" fill="none"><path d="M20 11a8 8 0 0 0-14.7-4L4 9m0-5v5h5m-5 4a8 8 0 0 0 14.7 4L20 15m0 5v-5h-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Atualizar</button>
+                        </div>
                     </div>
-                    <button @click="carregarModelos()" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition">Atualizar Lista</button>
-                </div>
+                    <div class="error-banner" id="dashboard-error" role="alert"></div>
+                    <div class="stats" id="stats"></div>
+                    <div class="analytics-grid">
+                        <article class="panel">
+                            <div class="panel-head">
+                                <div><h2 class="panel-title">Volume de requisições</h2><div class="panel-hint">Atividade diária e latência média</div></div>
+                                <div class="legend"><span><i></i>Requisições</span><span><i class="orange"></i>Latência</span></div>
+                            </div>
+                            <div class="chart-area" id="volume-chart"></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-head"><div><h2 class="panel-title">Operações</h2><div class="panel-hint">Distribuição por tipo</div></div></div>
+                            <div class="operation-list" id="operation-list"></div>
+                        </article>
+                    </div>
+                    <div class="analytics-grid equal">
+                        <article class="panel">
+                            <div class="panel-head"><div><h2 class="panel-title">Aplicações mais ativas</h2><div class="panel-hint">Requisições no período selecionado</div></div></div>
+                            <div class="ranking-list" id="ranking-list"></div>
+                        </article>
+                        <article class="panel">
+                            <div class="panel-head"><div><h2 class="panel-title">Latência da API</h2><div class="panel-hint">Média e percentil 95 do período</div></div></div>
+                            <div id="latency-summary"></div>
+                        </article>
+                    </div>
+                    <article class="panel">
+                        <div class="panel-head"><div><h2 class="panel-title">Requisições recentes</h2><div class="panel-hint">Últimos eventos registrados na auditoria</div></div></div>
+                        <div class="table-wrap" id="recent-table"></div>
+                    </article>
+                </section>
 
-                <div class="grid grid-cols-1 gap-4">
-                    <template x-for="modelo in modelos" :key="modelo.id">
-                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                <section class="view hidden" id="view-applications">
+                    <div class="page-head">
+                        <div><div class="eyebrow">Tenants</div><h1>Aplicações</h1><p class="subtitle">Organize os tenants e acompanhe seus identificadores.</p></div>
+                        <div class="actions"><button class="button primary" data-action="new-application">＋ Nova aplicação</button></div>
+                    </div>
+                    <div class="error-banner" id="applications-error" role="alert"></div>
+                    <div class="cards-grid" id="applications-list"></div>
+                </section>
+
+                <section class="view hidden" id="view-application-details">
+
+                    <div class="page-head">
+                        <div>
+                            <div class="eyebrow">Tenants / Detalhes</div>
+                            <h1>Detalhes da aplicação</h1>
+                            <p class="subtitle">
+                                Acompanhe os recursos e a utilização desta aplicação.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="error-banner" id="application-details-error" role="alert"></div>
+
+                    <!-- Identificação da aplicação -->
+                    <div class="application-detail-header">
+                        <div class="application-detail-identity">
+                            <div class="application-detail-name">
+                                <h2 id="detail-application-name">Carregando aplicação…</h2>
+                                <span class="badge" id="detail-application-status">—</span>
+                            </div>
+
+                            <div class="application-detail-meta">
+                                <span id="detail-application-id"></span>
+                                <span id="detail-application-created"></span>
+                            </div>
+                        </div>
+
+                        <div class="actions">
+                            <button class="button" data-action="back-applications">
+                                ← Voltar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Indicadores gerais -->
+                    <div class="application-detail-section">
+                        <h2 class="application-detail-section-title">
+                            Recursos cadastrados
+                        </h2>
+
+                        <div class="stats" id="application-resource-stats"></div>
+                    </div>
+
+                    <!-- Utilização -->
+                    <div class="application-detail-section">
+
+                        <div class="page-head">
                             <div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="font-semibold text-sm" x-text="modelo.nome"></span>
-                                    <span class="text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-300" x-text="modelo.id"></span>
-                                </div>
-                                <p class="text-xs text-slate-400 mt-1">Provedor: <span x-text="modelo.provedor"></span> | Dimensões: <span x-text="modelo.dimensoes"></span></p>
+                                <h2 class="application-detail-section-title">
+                                    Utilização da API
+                                </h2>
+                                <p class="subtitle">
+                                    Indicadores de utilização e desempenho da aplicação.
+                                </p>
                             </div>
-                            <div class="flex items-center space-x-3">
-                                <span class="text-xs px-2.5 py-1 rounded-full font-medium" :class="modelo.ativo ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'" x-text="modelo.ativo ? 'Ativo' : 'Inativo'"></span>
+
+                            <div class="application-detail-period">
+                                <label for="application-detail-period">Período</label>
+
+                                <select class="select" id="application-detail-period">
+                                    <option value="7">7 dias</option>
+                                    <option value="15">15 dias</option>
+                                    <option value="30" selected>30 dias</option>
+                                    <option value="60">60 dias</option>
+                                    <option value="90">90 dias</option>
+                                </select>
                             </div>
                         </div>
-                    </template>
-                </div>
-            </div>
 
-            <!-- TAB 2: APLICAÇÕES -->
-            <div x-show="aba === 'aplicacoes'" style="display: none;">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-xl font-bold">Aplicações & Chaves de API</h2>
-                        <p class="text-xs text-slate-400 mt-1">Visualize tenants cadastrados e gere chaves de acesso.</p>
+                        <div class="stats" id="application-usage-stats"></div>
+
+                        <div class="analytics-grid">
+                            <article class="panel">
+                                <div class="panel-head">
+                                    <div>
+                                        <h2 class="panel-title">Volume de requisições</h2>
+                                        <div class="panel-hint">
+                                            Atividade diária e latência média
+                                        </div>
+                                    </div>
+
+                                    <div class="legend">
+                                        <span><i></i>Requisições</span>
+                                        <span><i class="orange"></i>Latência</span>
+                                    </div>
+                                </div>
+
+                                <div class="chart-area" id="application-volume-chart"></div>
+                            </article>
+
+                            <article class="panel">
+                                <div class="panel-head">
+                                    <div>
+                                        <h2 class="panel-title">Operações</h2>
+                                        <div class="panel-hint">
+                                            Distribuição por tipo de operação
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="operation-list" id="application-operation-list"></div>
+                            </article>
+                        </div>
                     </div>
-                    <button @click="abrirModalNovaApp = true" class="bg-emerald-600 hover:bg-emerald-500 text-xs px-3 py-2 rounded-lg font-medium transition">Nova Aplicação</button>
-                </div>
 
-                <div class="space-y-4">
-                    <template x-for="app in aplicacoes" :key="app.id">
-                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                            <div class="flex justify-between items-start">
+                    <!-- Coleções -->
+                    <div class="application-detail-section">
+                        <h2 class="application-detail-section-title">
+                            Coleções associadas
+                        </h2>
+
+                        <article class="panel">
+                            <div class="panel-head">
                                 <div>
-                                    <h3 class="font-semibold text-sm" x-text="app.nome"></h3>
-                                    <p class="text-xs font-mono text-slate-500 mt-0.5" x-text="app.id"></p>
+                                    <h2 class="panel-title">Coleções da aplicação</h2>
+                                    <div class="panel-hint" id="detail-collections-summary"></div>
                                 </div>
-                                <button @click="listarChaves(app.id)" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition">Ver Chaves</button>
+                            </div>
+
+                            <div class="application-detail-table" id="detail-collections-table"></div>
+                        </article>
+                    </div>
+
+                    <!-- Chaves de API -->
+                    <div class="application-detail-section">
+                        <h2 class="application-detail-section-title">
+                            Chaves de API
+                        </h2>
+
+                        <div class="cards-grid" id="detail-keys-list"></div>
+                    </div>
+
+                    <!-- Auditoria recente -->
+                    <div class="application-detail-section">
+                        <h2 class="application-detail-section-title">
+                            Requisições recentes
+                        </h2>
+
+                        <article class="panel">
+                            <div class="panel-head">
+                                <div>
+                                    <h2 class="panel-title">Histórico de requisições</h2>
+                                    <div class="panel-hint">
+                                        Últimas chamadas registradas na auditoria
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="application-detail-table" id="detail-recent-table"></div>
+                        </article>
+                    </div>
+
+                </section>
+
+                <section class="view hidden" id="view-collections">
+                    <div class="page-head">
+                        <div>
+                            <div class="eyebrow">Armazenamento</div>
+                            <h1>Coleções</h1>
+                            <p class="subtitle">
+                                Visualize e administre as coleções de todas as aplicações.
+                            </p>
+                        </div>
+
+                        <div class="actions">
+                            <button class="button" data-action="refresh-collections">
+                                ↻ Atualizar
+                            </button>
+                            <button class="button primary" data-action="new-collection">
+                                ＋ Nova coleção
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="error-banner" id="collections-error" role="alert"></div>
+
+                    <div class="panel" style="margin-bottom:14px;">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="collection-application-filter">Aplicação</label>
+                                <select id="collection-application-filter">
+                                    <option value="">Todas as aplicações</option>
+                                </select>
+                            </div>
+
+                            <div class="field">
+                                <label for="collection-model-filter">Modelo de embedding</label>
+                                <select id="collection-model-filter">
+                                    <option value="">Todos os modelos</option>
+                                </select>
                             </div>
                         </div>
-                    </template>
-                </div>
-            </div>
+                    </div>
 
-        </section>
-    </main>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2 class="panel-title">Coleções cadastradas</h2>
+                                <div class="panel-hint" id="collections-summary">
+                                    Carregando coleções…
+                                </div>
+                            </div>
+                        </div>
 
-    <!-- Script de Reatividade (Alpine.js) -->
-    <script src="/static/js/admin.js"></script>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Coleção</th>
+                                        <th>Aplicação</th>
+                                        <th>Modelo</th>
+                                        <th>Embeddings</th>
+                                        <th>Visibilidade</th>
+                                        <th>Criada em</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="collections-list">
+                                    <tr>
+                                        <td colspan="7" class="loading">Carregando…</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="view hidden" id="view-keys">
+                    <div class="page-head">
+                        <div><div class="eyebrow">Acesso</div><h1>Chaves de API</h1><p class="subtitle">Crie, acompanhe e revogue credenciais por aplicação.</p></div>
+                        <div class="actions"><button class="button primary" data-action="new-key">＋ Gerar chave</button></div>
+                    </div>
+                    <div class="error-banner" id="keys-error" role="alert"></div>
+                    <div class="cards-grid" id="keys-list"></div>
+                </section>
+
+                <section class="view hidden" id="view-models">
+                    <div class="page-head">
+                        <div><div class="eyebrow">Inferência</div><h1>Modelos</h1><p class="subtitle">Gerencie os modelos de embedding disponíveis para as coleções.</p></div>
+                        <div class="actions"><button class="button primary" data-action="new-model">＋ Novo modelo</button></div>
+                    </div>
+                    <div class="error-banner" id="models-error" role="alert"></div>
+                    <div class="cards-grid" id="models-list"></div>
+                </section>
+
+                <section class="view hidden" id="view-infrastructure">
+                    <div class="page-head">
+                        <div>
+                            <div class="eyebrow">Monitoramento</div>
+                            <h1>Infraestrutura</h1>
+                            <p class="subtitle">
+                                Acompanhe a disponibilidade e o estado operacional
+                                dos componentes do Caboré.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="error-banner" id="infrastructure-error" role="alert"></div>
+                    <div id="infrastructure-content">
+
+                        <!-- Visão geral -->
+                        <div class="stats">
+                            <article class="stat-card">
+                                <div class="stat-top">
+                                    <span>Estado geral</span>
+                                    <span class="stat-icon">●</span>
+                                </div>
+                                <div class="stat-value" id="infra-overall-status">—</div>
+                                <div class="stat-foot">Disponibilidade da infraestrutura</div>
+                            </article>
+
+                            <article class="stat-card">
+                                <div class="stat-top">
+                                    <span>Modelos carregados</span>
+                                    <span class="stat-icon">◈</span>
+                                </div>
+                                <div class="stat-value" id="infra-loaded-count">—</div>
+                                <div class="stat-foot">Modelos em memória no motor de inferência</div>
+                            </article>
+
+                            <article class="stat-card">
+                                <div class="stat-top">
+                                    <span>Modelos cadastrados</span>
+                                    <span class="stat-icon">◇</span>
+                                </div>
+                                <div class="stat-value" id="infra-registered-count">—</div>
+                                <div class="stat-foot">Modelos disponíveis no sistema</div>
+                            </article>
+
+                            <article class="stat-card">
+                                <div class="stat-top">
+                                    <span>Dispositivo</span>
+                                    <span class="stat-icon">⌘</span>
+                                </div>
+                                <div class="stat-value" id="infra-device">—</div>
+                                <div class="stat-foot">Dispositivo configurado para inferência</div>
+                            </article>
+                        </div>
+
+                        <!-- Componentes -->
+                        <div class="infrastructure-grid">
+
+                            <article class="infrastructure-card">
+                                <div class="infrastructure-card-head">
+                                    <div>
+                                        <h2 class="infrastructure-card-title">API</h2>
+                                        <div class="infrastructure-card-description">
+                                            Disponibilidade do serviço
+                                        </div>
+                                    </div>
+                                    <span class="infrastructure-status" id="infra-api-status">
+                                        Aguardando
+                                    </span>
+                                </div>
+                                <div class="infrastructure-card-description">
+                                    Estado geral da aplicação e atendimento das requisições.
+                                </div>
+                            </article>
+
+                            <article class="infrastructure-card">
+                                <div class="infrastructure-card-head">
+                                    <div>
+                                        <h2 class="infrastructure-card-title">Banco de dados</h2>
+                                        <div class="infrastructure-card-description">
+                                            PostgreSQL
+                                        </div>
+                                    </div>
+                                    <span class="infrastructure-status" id="infra-database-status">
+                                        Aguardando
+                                    </span>
+                                </div>
+                                <div class="infrastructure-card-description">
+                                    Verificação de conectividade com o banco de dados.
+                                </div>
+                            </article>
+
+                            <article class="infrastructure-card">
+                                <div class="infrastructure-card-head">
+                                    <div>
+                                        <h2 class="infrastructure-card-title">Motor de inferência</h2>
+                                        <div class="infrastructure-card-description">
+                                            Sentence Transformers
+                                        </div>
+                                    </div>
+                                    <span class="infrastructure-status" id="infra-engine-status">
+                                        Aguardando
+                                    </span>
+                                </div>
+
+                                <div class="infrastructure-metrics">
+                                    <div class="infrastructure-metric">
+                                        <div class="infrastructure-metric-label">Dispositivo</div>
+                                        <div class="infrastructure-metric-value" id="infra-engine-device">—</div>
+                                    </div>
+                                    <div class="infrastructure-metric">
+                                        <div class="infrastructure-metric-label">Modelos carregados</div>
+                                        <div class="infrastructure-metric-value" id="infra-engine-models">—</div>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="infrastructure-card">
+                                <div class="infrastructure-card-head">
+                                    <div>
+                                        <h2 class="infrastructure-card-title">Modelos de embedding</h2>
+                                        <div class="infrastructure-card-description">
+                                            Estado dos modelos cadastrados
+                                        </div>
+                                    </div>
+                                    <span class="infrastructure-status" id="infra-models-status">
+                                        Aguardando
+                                    </span>
+                                </div>
+
+                                <div class="infrastructure-metrics">
+                                    <div class="infrastructure-metric">
+                                        <div class="infrastructure-metric-label">Cadastrados</div>
+                                        <div class="infrastructure-metric-value" id="infra-models-total">—</div>
+                                    </div>
+                                    <div class="infrastructure-metric">
+                                        <div class="infrastructure-metric-label">Carregados</div>
+                                        <div class="infrastructure-metric-value" id="infra-models-loaded">—</div>
+                                    </div>
+                                    <div class="infrastructure-metric">
+                                        <div class="infrastructure-metric-label">Não carregados</div>
+                                        <div class="infrastructure-metric-value" id="infra-models-unloaded">—</div>
+                                    </div>
+                                    <div class="infrastructure-metric">
+                                        <div class="infrastructure-metric-label">Dispositivo</div>
+                                        <div class="infrastructure-metric-value" id="infra-models-device">—</div>
+                                    </div>
+                                </div>
+                            </article>
+
+                        </div>
+
+
+                        <div class="infrastructure-models-section">
+                            <article class="panel">
+                                <div class="panel-head">
+                                    <div>
+                                        <h2 class="panel-title">Modelos cadastrados</h2>
+                                        <div class="panel-hint">
+                                            Informações cadastrais e situação no motor de inferência
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-wrap" id="infra-models-table">
+                                    <div class="loading">Aguardando informações dos modelos...</div>
+                                </div>
+                            </article>
+                        </div>
+
+
+                        <div class="infrastructure-footer">
+                            <span id="infra-last-update">Aguardando primeira consulta</span>
+                            <button class="button" data-action="refresh-infrastructure">
+                                ↻ Atualizar
+                            </button>
+                        </div>
+
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <dialog class="dialog" id="management-dialog">
+        <div class="dialog-inner" id="dialog-content"></div>
+    </dialog>
+    <div class="toast" id="toast" role="status"></div>
+    <script type="module" src="/static/js/admin.js?v=16"></script>
 </body>
 </html>
