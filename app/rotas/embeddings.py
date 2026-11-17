@@ -10,9 +10,11 @@ from app.limites import LIMITE_MAXIMO_ITENS_LOTE
 from app.models.modelos import Aplicacao
 from app.rotas.dependencias import obter_aplicacao_atual
 from app.schemas.schemas import (
+    GerarVetorSchema,
     InserirEmbeddingSchema,
     RemoverEmbeddingSchema,
     RequisicaoBuscaSchema,
+    RespostaGerarVetorSchema,
     RespostaInserirEmbeddingsSchema,
     ResultadoBuscaSchema,
 )
@@ -22,6 +24,8 @@ from app.services import (
     colecao_service,
     embedding_service,
 )
+
+from app.services.inferencia_service import motor_inferencia
 
 
 router = APIRouter(prefix="/embeddings", tags=["Embeddings e busca"])
@@ -105,6 +109,29 @@ async def inserir_embeddings_lote_route(
         ]
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/gerar")
+async def gerar_vetor_route(
+    parametros: GerarVetorSchema,
+    aplicacao: Aplicacao = Depends(obter_aplicacao_atual)
+) -> RespostaGerarVetorSchema:
+    """Gera uma representação vetorial de um texto utilizando um modelo de geração de embedding específico"""
+    texto = parametros.texto
+    id_modelo = parametros.id_modelo
+    repositorio = parametros.repositorio
+
+    vetor = await motor_inferencia.gerar_vetor(
+        texto=texto,
+        modelo_id=id_modelo,
+        repositorio=repositorio
+    )
+
+    return {
+        "vetor": vetor,
+        "id_modelo": id_modelo,
+        "repositorio": repositorio
+    }
 
 
 @router.post("/buscar")

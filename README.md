@@ -33,7 +33,7 @@ Caboré é um serviço HTTP para organizar coleções vetoriais por aplicação 
 - **Inserção de vetores:** inserção individual e em lote, com deduplicação baseada no hash do texto de referência.
 - **Busca por similaridade:** pesquisa por texto em uma ou mais coleções, com filtro opcional de metadados e utilização da métrica configurada para cada modelo (`cosine`, `l2` ou `ip`).
 - **Várias dimensões:** armazenamento especializado para vetores de 256, 512, 768, 1024, 1536 e 3072 dimensões.
-- **Inferência local para consultas:** modelos `SentenceTransformer` são carregados sob demanda, mantidos em cache no processo e executados fora do event loop.
+- **Geração local de embeddings:** modelos `SentenceTransformer` são carregados sob demanda, mantidos em cache no processo e usados para gerar vetores diretamente ou durante consultas, fora do event loop.
 - **Telemetria de operações selecionadas:** eventos de inserção e busca são registrados em segundo plano.
 - **Documentação OpenAPI:** disponibilizada pelo FastAPI em `/docs` e `/redoc`.
 
@@ -301,8 +301,26 @@ Use um modelo já cadastrado, com dimensão compatível com o modelo realmente u
 |---|---|---|
 | `POST` | `/v1/embeddings/` | Insere um embedding; exige `colecao_id`, `texto_referencia` e `vetor`. |
 | `POST` | `/v1/embeddings/lote?colecao_id={uuid}` | Insere entre 1 e 100 embeddings para a coleção indicada. O corpo é uma lista JSON. |
+| `POST` | `/v1/embeddings/gerar` | Gera o vetor de um texto usando o modelo e o repositório informados. |
 | `POST` | `/v1/embeddings/buscar` | Busca por texto em uma ou mais coleções. |
 | `DELETE` | `/v1/embeddings/{embedding_id}` | Remove um embedding; o corpo JSON deve informar `colecao_id`. |
+
+O endpoint de geração exige uma chave de aplicação (`X-API-Key`). Envie `texto` (de 1 a 8192 caracteres), `id_modelo` (até 50 caracteres) e `repositorio` (até 550 caracteres) no corpo JSON. O repositório pode ser um identificador aceito pelo `SentenceTransformer` ou um caminho local acessível pelo processo da API. O modelo é carregado sob demanda e mantido em cache no processo.
+
+Exemplo de geração:
+
+```bash
+curl -X POST http\://127.0.0.1:8000/v1/embeddings/gerar \\
+  -H "X-API-Key: cb_sua_chave_de_aplicacao" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "texto": "Texto para transformar em representação vetorial.",
+    "id_modelo": "meu-modelo",
+    "repositorio": "sentence-transformers/all-MiniLM-L6-v2"
+  }'
+```
+
+A resposta contém `vetor` (uma lista de números), `id_modelo` e `repositorio`. O tamanho do vetor depende do modelo utilizado; use um modelo com dimensão compatível com a coleção onde pretende armazená-lo.
 
 Exemplo de inserção de um vetor:
 

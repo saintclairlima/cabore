@@ -186,6 +186,16 @@ class RequisicaoBuscaSchema(BaseModel):
             raise ValueError("Os identificadores não podem ser vazios.")
         return valores
 
+class GerarVetorSchema(BaseModel):
+    texto: str = Field(..., min_length=1, max_length=LIMITE_MAXIMO_TEXTO)
+    id_modelo: str = Field(..., max_length=50)
+    repositorio: str = Field(..., max_length=550)
+
+class RespostaGerarVetorSchema(BaseModel):
+    vetor: List[float]
+    id_modelo: str
+    repositorio: str
+
 class ResultadoBuscaSchema(TypedDict):
     id: str
     colecao_id: str
