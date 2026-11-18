@@ -8,6 +8,7 @@ from app.models.modelos import Aplicacao, Colecao, EmbeddingBase, MetricaDistanc
 from app.models.tipos import EstrategiaCombinacao, MetadataDict
 from app.schemas.schemas import ResultadoBuscaSchema
 from app.services import embedding_service, modelo_service
+from app.services.filtro_metadados_service import construir_filtro_metadados
 from app.services.inferencia_service import motor_inferencia
 
 class GrupoModeloBusca(TypedDict):
@@ -212,7 +213,6 @@ async def buscar_similaridade(
 
     # Agrupa as coleções por modelo/dimensão
     # Exemplo: { 'bge-m3': [col_id_1, col_id_2], 'text-embedding-3-small': [col_id_3] }
-    # AFAZER: caberia tipar aqui?
     grupos_por_modelo: Dict[str, GrupoModeloBusca] = {}
     
     for colecao_modelo in lista_colecoes_modelos:
@@ -254,55 +254,65 @@ async def buscar_similaridade(
     return resultados_finais
 
 
-async def buscar_por_colecao(
+async def buscar_por_vetor(
     sessao: AsyncSession,
+    aplicacao_cliente: Aplicacao,
     colecao_id: uuid.UUID,
     vetor_consulta: List[float],
-    limite: int = 10,
-    filtro_metadados: Optional[MetadataDict] = None,
+    top_k: Optional[int] = 10,
+    filtro_metadados: Optional[Dict[str, Any]] = None,
     metrica_distancia: MetricaDistancia = MetricaDistancia.COSINE
 ) -> List[ResultadoBuscaSchema]:
     '''
-    Realiza busca por similaridade de cosseno com suporte a filtro estrito por metadados JSONB.
+    Realiza busca por similaridade com suporte aos operadores de filtro JSONB.
     '''
     
     # Valida coleção/aplicação e descobre a tabela
     consulta_colecao_modelo = (
         select(Colecao, ModeloEmbedding)
         .join(ModeloEmbedding, Colecao.modelo_embedding_id == ModeloEmbedding.id)
-        .where(Colecao.id == colecao_id)
+        .where(
+            and_(
+                Colecao.id == colecao_id,
+                or_(
+                    Colecao.aplicacao_id == aplicacao_cliente.id,
+                    Colecao.publica.is_(True)
+                )
+            )
+        )
     )
 
     resultado_colecao_modelo = await sessao.execute(consulta_colecao_modelo)
-    colecao_modelo = resultado_colecao_modelo.fetchone()
+    colecao, modelo = resultado_colecao_modelo.fetchone()
 
-    if not colecao_modelo:
+    if not colecao:
         raise ValueError('Coleção não encontrada.')
     
     # Valida se há mistura de dimensões incompatíveis na mesma busca
-    dimensoes = colecao_modelo.ModeloEmbedding.dimensoes
-        
+    dimensoes = modelo.dimensoes        
     if len(vetor_consulta) != dimensoes:
         raise ValueError(f'Dimensões do vetor de consulta ({len(vetor_consulta)}) incompatíveis com as dimensões do modelo ({dimensoes}).')
 
     classe_embedding = embedding_service.obter_classe_embedding(dimensoes)
-    funcao_distancia = obter_funcao_distancia(classe_embedding, metrica_distancia)
+    funcao_distancia = obter_funcao_distancia(classe_embedding, modelo.metrica_distancia)
     distancia = funcao_distancia(vetor_consulta).label('distancia')
 
     consulta_busca = (
         select(classe_embedding, distancia)
-        .where(classe_embedding.colecao_id == colecao_id)
+        .where(classe_embedding.colecao_id == colecao.id)
     )
 
-    # Aplica filtro JSONB se fornecido (aproveita o índice GIN criado no model)
-    if filtro_metadados:
-        consulta_busca = consulta_busca.where(classe_embedding.metadados.contains(filtro_metadados))
+    # Aplica os filtros JSONB, utilizando @> sempre que possível.
+    filtro = construir_filtro_metadados(
+        classe_embedding.metadados,
+        filtro_metadados
+    )
+    if filtro is not None:
+        consulta_busca = consulta_busca.where(filtro)
 
-    consulta_busca = consulta_busca.order_by(distancia).limit(limite)
+    consulta_busca = consulta_busca.order_by(distancia).limit(top_k)
     resultado = await sessao.execute(consulta_busca)
     linhas = resultado.all()
-    
-    nome_modelo = colecao_modelo.ModeloEmbedding.id
 
     resultados: List[ResultadoBuscaSchema] = []
     for registro, dist in linhas:
@@ -311,9 +321,9 @@ async def buscar_por_colecao(
             'colecao_id': str(registro.colecao_id),
             'conteudo_hash': registro.conteudo_hash,
             'distancia': float(dist),
-            'rank_colecao': registro.num_linha,
             'metrica_distancia': metrica_distancia.value,
-            'nome_modelo': nome_modelo,
+            'score_relevancia': None,
+            'nome_modelo': modelo.id,
             'modelo_dimensoes': dimensoes,
             'metadados': registro.metadados,
             'criado_em': registro.criado_em,
@@ -326,11 +336,11 @@ async def buscar_multicolecoes(
     sessao: AsyncSession,
     vetor_consulta: List[float],
     grupo_modelo: GrupoModeloBusca,
-    top_k_colecao: int = 10,
+    top_k_colecao: Optional[int] = 10,
     filtro_metadados: Optional[MetadataDict] = None
 ) -> List[ResultadoBuscaSchema]:
     '''
-    Realiza busca por similaridade de cosseno com suporte a filtro estrito por metadados JSONB.
+    Realiza busca por similaridade em múltiplas coleções com suporte aos operadores de filtro JSONB.
     '''
 
     ids_colecoes = grupo_modelo['ids_colecoes']
@@ -373,10 +383,12 @@ async def buscar_multicolecoes(
         )
     )
 
-    if filtro_metadados:
-        subquery = subquery.where(
-            classe_embedding.metadados.contains(filtro_metadados)
-        )
+    filtro = construir_filtro_metadados(
+        classe_embedding.metadados,
+        filtro_metadados
+    )
+    if filtro is not None:
+        subquery = subquery.where(filtro)
 
     subquery = subquery.subquery()
 

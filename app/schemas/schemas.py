@@ -166,7 +166,13 @@ class RequisicaoBuscaSchema(BaseModel):
     top_k_colecao: int = Field(default=10, ge=1, le=100)
     top_k_global: Optional[int] = Field(default=None)
     estrategia_combinacao: EstrategiaCombinacao = Field(default=EstrategiaCombinacao.NONE)
-    filtro_metadados: Optional[Dict[str, Any]] = None
+    filtro_metadados: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Filtros JSONB. Aceita igualdade direta ou os operadores $eq, $ne, $in, $nin, "
+            "$gt, $gte, $lt e $lte. Comparações relacionais aceitam somente números."
+        ),
+    )
 
     @field_validator("texto_consulta")
     @classmethod
@@ -186,15 +192,17 @@ class RequisicaoBuscaSchema(BaseModel):
             raise ValueError("Os identificadores não podem ser vazios.")
         return valores
 
-class GerarVetorSchema(BaseModel):
-    texto: str = Field(..., min_length=1, max_length=LIMITE_MAXIMO_TEXTO)
-    id_modelo: str = Field(..., max_length=50)
-    repositorio: str = Field(..., max_length=550)
-
-class RespostaGerarVetorSchema(BaseModel):
-    vetor: List[float]
-    id_modelo: str
-    repositorio: str
+class RequisicaoBuscaComVetorSchema(BaseModel):
+    vetor: List[float] = Field(..., min_length=1)
+    colecao_id: IdentificadorColecao = Field(...)
+    top_k: int = Field(default=10, ge=1, le=100)
+    filtro_metadados: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Filtros JSONB. Aceita igualdade direta ou os operadores $eq, $ne, $in, $nin, "
+            "$gt, $gte, $lt e $lte. Comparações relacionais aceitam somente números."
+        ),
+    )
 
 class ResultadoBuscaSchema(TypedDict):
     id: str
@@ -207,3 +215,13 @@ class ResultadoBuscaSchema(TypedDict):
     modelo_dimensoes: Optional[int]
     metadados: MetadataDict
     criado_em: datetime
+
+class RequisicaoGerarVetorSchema(BaseModel):
+    texto: str = Field(..., min_length=1, max_length=LIMITE_MAXIMO_TEXTO)
+    modelo_id: str = Field(..., max_length=50)
+    repositorio: str = Field(..., max_length=550)
+
+class RespostaGerarVetorSchema(BaseModel):
+    vetor: List[float]
+    modelo_id: str
+    repositorio: str

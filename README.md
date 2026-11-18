@@ -31,7 +31,7 @@ Caboré é um serviço HTTP para organizar coleções vetoriais por aplicação 
 - **Chaves de API protegidas:** a chave completa é retornada somente na criação; o banco armazena seu hash SHA-256.
 - **Coleções e metadados:** coleções vinculadas a um modelo, com configuração e metadados JSONB.
 - **Inserção de vetores:** inserção individual e em lote, com deduplicação baseada no hash do texto de referência.
-- **Busca por similaridade:** pesquisa por texto em uma ou mais coleções, com filtro opcional de metadados e utilização da métrica configurada para cada modelo (`cosine`, `l2` ou `ip`).
+- **Busca por similaridade:** pesquisa por texto ou por um vetor fornecido pelo cliente, em uma ou mais coleções, com filtros avançados de metadados e utilização da métrica configurada para cada modelo (`cosine`, `l2` ou `ip`).
 - **Várias dimensões:** armazenamento especializado para vetores de 256, 512, 768, 1024, 1536 e 3072 dimensões.
 - **Geração local de embeddings:** modelos `SentenceTransformer` são carregados sob demanda, mantidos em cache no processo e usados para gerar vetores diretamente ou durante consultas, fora do event loop.
 - **Telemetria de operações selecionadas:** eventos de inserção e busca são registrados em segundo plano.
@@ -303,6 +303,7 @@ Use um modelo já cadastrado, com dimensão compatível com o modelo realmente u
 | `POST` | `/v1/embeddings/lote?colecao_id={uuid}` | Insere entre 1 e 100 embeddings para a coleção indicada. O corpo é uma lista JSON. |
 | `POST` | `/v1/embeddings/gerar` | Gera o vetor de um texto usando o modelo e o repositório informados. |
 | `POST` | `/v1/embeddings/buscar` | Busca por texto em uma ou mais coleções. |
+| `POST` | `/v1/embeddings/buscar-vetor` | Busca por similaridade usando um vetor fornecido pelo cliente em uma coleção. |
 | `DELETE` | `/v1/embeddings/{embedding_id}` | Remove um embedding; o corpo JSON deve informar `colecao_id`. |
 
 O endpoint de geração exige uma chave de aplicação (`X-API-Key`). Envie `texto` (de 1 a 8192 caracteres), `id_modelo` (até 50 caracteres) e `repositorio` (até 550 caracteres) no corpo JSON. O repositório pode ser um identificador aceito pelo `SentenceTransformer` ou um caminho local acessível pelo processo da API. O modelo é carregado sob demanda e mantido em cache no processo.
@@ -359,18 +360,38 @@ No corpo de busca, `texto_consulta` é obrigatório. `ids_colecoes` e `ids_aplic
 
 `top_k_colecao` deve estar entre 1 e 100 e usa 10 por padrão. `top_k_global`, quando informado, deve ser maior que zero. `estrategia_combinacao` aceita `none` ou `rrf`; o modo RRF combina os rankings por conteúdo distinto e preserva as ocorrências selecionadas. A consulta semântica é gerada pelo serviço local de inferência; para cada modelo consultado, o processo precisa conseguir carregar seu modelo/repositório.
 
+Para consultar diretamente com um vetor, envie `colecao_id`, `vetor` (lista de números) e, opcionalmente, `top_k` e `filtro_metadados`. `top_k` aceita valores entre 1 e 100 e usa 10 por padrão. O vetor deve ter exatamente a dimensão do modelo associado à coleção. Essa rota não gera embeddings: o cliente deve fornecer um vetor produzido de forma compatível com esse modelo.
+
+Exemplo de busca por vetor:
+
+```bash
+curl -X POST http\://127.0.0.1:8000/v1/embeddings/buscar-vetor \\
+  -H "X-API-Key: cb_sua_chave_de_aplicacao" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "colecao_id": "UUID_DA_COLECAO",
+    "vetor": [0.12, -0.08, 0.31],
+    "top_k": 10,
+    "filtro_metadados": {
+      "categoria": {"$in": ["guia", "manual"]},
+      "prioridade": {"$gte": 2}
+    }
+  }'
+```
+
+O vetor do exemplo é ilustrativo; substitua-o por uma lista numérica com a dimensão exigida pelo modelo da coleção.
+
 A resposta de busca inclui, para cada resultado, `id`, `colecao_id`, `conteudo_hash`, `distancia`, `metrica_distancia`, `score_relevancia`, `nome_modelo`, `modelo_dimensoes`, `metadados` e `criado_em`. Em `rrf`, `score_relevancia` contém o score calculado; fora desse modo, seu valor é `null`. Os vetores retornados não são incluídos.
 
 Erros de validação de entrada retornam HTTP `422`; os demais status dependem da operação e são descritos também no OpenAPI. Erros comuns incluem credenciais inválidas (`401`/`403`), recurso não encontrado (`404`), conflito de nomes de chave (`409`) e dados semanticamente inválidos (`400`).
 
 ## Busca semântica
 
-- A busca aceita texto, não um vetor de consulta enviado pelo cliente.
-- O vetor da consulta é produzido com `sentence-transformers` usando o modelo associado a cada coleção solicitada.
+- A busca pode receber texto ou um vetor de consulta. Na busca por texto, o vetor é produzido com `sentence-transformers` usando o modelo associado a cada coleção; na busca por vetor, o cliente envia o vetor e consulta uma coleção por requisição.
 - Coleções de modelos diferentes podem participar da mesma busca global; a aplicação gera uma consulta por modelo, consulta cada grupo e combina os resultados.
 - Cada modelo pode usar a métrica `cosine`, `l2` ou `ip`. A interpretação da distância deve considerar a métrica registrada; o resultado não presume cosseno em todos os modelos.
 - A combinação global pode ser desativada (`none`) ou usar Reciprocal Rank Fusion (`rrf`).
-- Metadados são filtrados por contenção JSONB; informe um objeto JSON que deve estar contido nos metadados do resultado.
+- Os filtros de metadados aceitam igualdade direta ou os operadores `$eq`, `$ne`, `$in`, `$nin`, `$gt`, `$gte`, `$lt` e `$lte`; também podem apontar para campos aninhados. Filtros em campos ou condições diferentes são combinados com AND. Os operadores relacionais aceitam apenas números finitos.
 - O sistema limita os resultados por grupo e depois ordena e aplica o limite global informado.
 - A inserção não invoca o serviço de inferência: a aplicação cliente deve calcular e enviar os vetores compatíveis com o modelo da coleção.
 

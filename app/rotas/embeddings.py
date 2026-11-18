@@ -10,7 +10,8 @@ from app.limites import LIMITE_MAXIMO_ITENS_LOTE
 from app.models.modelos import Aplicacao
 from app.rotas.dependencias import obter_aplicacao_atual
 from app.schemas.schemas import (
-    GerarVetorSchema,
+    RequisicaoBuscaComVetorSchema,
+    RequisicaoGerarVetorSchema,
     InserirEmbeddingSchema,
     RemoverEmbeddingSchema,
     RequisicaoBuscaSchema,
@@ -113,23 +114,23 @@ async def inserir_embeddings_lote_route(
 
 @router.post("/gerar")
 async def gerar_vetor_route(
-    parametros: GerarVetorSchema,
+    parametros: RequisicaoGerarVetorSchema,
     aplicacao: Aplicacao = Depends(obter_aplicacao_atual)
 ) -> RespostaGerarVetorSchema:
     """Gera uma representação vetorial de um texto utilizando um modelo de geração de embedding específico"""
     texto = parametros.texto
-    id_modelo = parametros.id_modelo
+    modelo_id = parametros.modelo_id
     repositorio = parametros.repositorio
 
     vetor = await motor_inferencia.gerar_vetor(
         texto=texto,
-        modelo_id=id_modelo,
+        modelo_id=modelo_id,
         repositorio=repositorio
     )
 
     return {
         "vetor": vetor,
-        "id_modelo": id_modelo,
+        "modelo_id": modelo_id,
         "repositorio": repositorio
     }
 
@@ -164,6 +165,41 @@ async def buscar_embeddings_route(
             auditoria_service.registrar_auditoria_em_background,
             aplicacao.id,
             "buscar_similaridade",
+            tempo_ms,
+            quantidade_resultados=len(resultados),
+        )
+
+        return resultados
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/buscar-vetor")
+async def buscar_embeddings_com_vetor_route(
+    parametros_busca: RequisicaoBuscaComVetorSchema,
+    tarefas: BackgroundTasks,
+    aplicacao: Aplicacao = Depends(obter_aplicacao_atual),
+    sessao: AsyncSession = Depends(obter_sessao_banco),
+) -> List[ResultadoBuscaSchema]:
+    """
+    Realiza busca semântica utilizando vetor, com filtragem por metadados.
+    """
+    inicio = time.perf_counter()
+    try:
+        resultados = await busca_service.buscar_por_vetor(
+            sessao=sessao,
+            aplicacao_cliente=aplicacao,
+            colecao_id=parametros_busca.colecao_id,
+            vetor_consulta=parametros_busca.vetor,
+            top_k=parametros_busca.top_k,
+            filtro_metadados=parametros_busca.filtro_metadados,
+        )
+
+        tempo_ms = round((time.perf_counter() - inicio) * 1000, 2)
+        tarefas.add_task(
+            auditoria_service.registrar_auditoria_em_background,
+            aplicacao.id,
+            "buscar_similaridade_vetor",
             tempo_ms,
             quantidade_resultados=len(resultados),
         )
